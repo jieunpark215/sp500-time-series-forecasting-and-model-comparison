@@ -92,5 +92,5 @@ S&P500 로그 수익률 데이터를 활용하여 전통적인 통계 기반 시
 
 **박지은**
 
-- GitHub : https://github.com/사용자명
-- Velog : https://velog.io/@사용자명
+- GitHub : https://github.com/jieunpark215
+- Velog : https://velog.io/@parkjieun
