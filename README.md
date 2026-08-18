@@ -1,63 +1,96 @@
-# S&P500 로그 수익률 기반 시계열 예측 모형 비교
+# S&P500 금융 시계열 예측 모델 비교 분석
 
-S&P500 일별 로그 수익률에 통계 모형(ARIMA, GARCH)부터 딥러닝(LSTM), Transformer 계열(PatchTST), Foundation Model(Chronos)까지 네 세대의 시계열 예측 방법론을 동일한 데이터·평가 기준으로 적용하고 비교한 개인 프로젝트입니다.
+S&P500 로그 수익률 데이터를 활용하여 전통적인 통계 기반 시계열 모델(ARIMA, GARCH)과 딥러닝 및 최신 Foundation Model(LSTM, PatchTST, Chronos)의 예측 성능을 비교·분석한 프로젝트입니다.
 
-## Overview
+금융 데이터의 정상성 검정과 전처리를 수행한 후 각 모델을 적용하여 예측 결과와 성능을 비교하고, 금융 시계열 데이터에 적합한 예측 방법을 분석했습니다.
 
-- **데이터**: S&P500(^GSPC) 일별 종가, 2015-01-01 ~ 2024-12-31 (약 2,500 거래일, Yahoo Finance)
-- **목표**: 금융 시계열의 비정상성·변동성 군집·fat tail 특성이 모형별 가정과 어떻게 충돌하는지 확인하고, 통계 모형과 딥러닝/사전학습 모형 간 예측 성능·해석 가능성 트레이드오프를 비교
-- **구성**: 전처리·정상성 검정은 공통, 이후 R(통계 모형)과 Python(신경망 모형)으로 분리 진행
+---
 
-## 분석 파이프라인
+# 사용 기술
 
-```
-데이터 수집(quantmod/yfinance) → 로그 수익률 변환 → ADF 정상성 검정 → ACF/PACF
-        │
-        ├─ R:  ARIMA(2,0,2) → GARCH(1,1) [ARCH 효과 검정 → 변동성 모형]
-        │
-        └─ Python: LSTM → PatchTST → Chronos(Zero-shot)
-                │
-                └─ 공통 평가: RMSE, MAE (train/test 80:20 분리)
-```
+| 구분 | 기술 |
+| --- | --- |
+| Language | Python, R |
+| Data | Yahoo Finance, quantmod |
+| Data Processing | Pandas, NumPy |
+| Statistical Model | ARIMA, GARCH |
+| Deep Learning | TensorFlow, Keras (LSTM) |
+| Transformer | PatchTST |
+| Foundation Model | Chronos |
+| Visualization | Matplotlib |
+| Collaboration | GitHub |
 
-## 결과 요약
+---
 
-| 모형 | 구분 | 특징 | RMSE | MAE |
-|---|---|---|---|---|
-| ARIMA(2,0,2) | 통계 | 잔차 자기상관 거의 없음(Ljung-Box p=0.3218), ARCH 효과 존재(p<0.001) → GARCH 필요성 확인 | - | - |
-| GARCH(1,1) | 통계 | 변동성 지속성 α+β≈0.997, 변동성 군집(COVID-19, 금리인상 구간에서 급등) 포착 | - | - |
-| LSTM | 딥러닝 | 60일 시퀀스 입력, 2-layer(64→32) + Dropout | 0.008232 | 0.006283 |
-| PatchTST | Transformer | 패치 단위(16일) 토큰화, input_size=336 | 0.008565 | 0.006608 |
-| Chronos | Foundation Model | amazon/chronos-t5-small, 추가 학습 없는 Zero-shot 예측 | **0.008165** | **0.006220** |
+# 데이터
 
-Zero-shot인 Chronos가 별도 학습 없이도 LSTM·PatchTST와 유사하거나 더 낮은 오차를 보였다는 점이 이 비교의 핵심 발견입니다. 다만 세 모형 간 오차 차이 자체가 크지 않아, S&P500 로그 수익률 예측에서는 모형 복잡도를 높이는 것 대비 얻는 이득이 제한적이라는 해석도 가능합니다.
+| 항목 | 내용 |
+| --- | --- |
+| 데이터 | S&P500 Index |
+| 출처 | Yahoo Finance |
+| 분석 대상 | 일별 로그 수익률(Log Return) |
 
-*(ARIMA/GARCH의 RMSE/MAE는 R 세션 결과값이 별도로 저장되지 않아 재실행 후 업데이트 예정입니다.)*
+---
 
-## 주요 발견
+# 분석 파이프라인
 
-- **정상성**: 원시 가격은 비정상(추세 존재), 로그 수익률은 ADF 검정상 정상 시계열로 확인 → ARIMA/GARCH 등 선형 모형 적용의 전제 조건 충족
-- **변동성 군집**: GARCH(1,1) 추정 결과 α+β≈0.997로 변동성 충격이 매우 오래 지속됨을 확인. COVID-19 충격, 2022년 Fed 금리 인상기에 변동성 급등 구간이 육안으로도 뚜렷하게 관찰됨
-- **모형 간 비교**: 통계 모형(ARIMA/GARCH)은 해석 가능성이 높지만 비선형 패턴을 포착하지 못함. 신경망 모형은 비선형 패턴을 학습할 수 있지만 이번 실험에서는 통계 모형 대비 압도적인 성능 우위를 보이지 않음 — 효율적 시장 가설과 궤를 같이하는 결과
-- **Foundation Model의 실용성**: Chronos는 도메인 특화 학습 없이도 baseline급 성능을 즉시 낼 수 있어, 빠른 벤치마킹 도구로서의 가능성을 보여줌
+![](./images/pipeline.png)
 
-## Tech Stack
+---
 
-- **R**: quantmod, urca, FinTS, forecast, rugarch
-- **Python**: yfinance, tensorflow/keras, neuralforecast(PatchTST), chronos-forecasting
+# 프로젝트 목적
 
-## Repository 구조
+본 프로젝트는 금융 시계열 데이터의 특성을 분석하고, 전통적인 통계 기반 시계열 모델과 최신 딥러닝 모델, Foundation Model의 예측 성능을 비교하기 위해 수행되었습니다.
 
-```
-├── r/
-│   └── arima_garch.Rmd          # 데이터 수집, 정상성 검정, ARIMA, GARCH
-├── python/
-│   └── lstm_patchtst_chronos.ipynb  # LSTM, PatchTST, Chronos 구현 및 비교
-└── README.md
-```
+로그 수익률 데이터를 생성한 후 정상성 검정과 전처리를 수행하고, ARIMA, GARCH, LSTM, PatchTST, Chronos 모델을 적용하여 예측 성능과 각 모델의 특성을 비교·분석했습니다.
 
-## 한계 및 향후 과제
+---
 
-- 잔차에 일부 구조가 남아있어(Ljung-Box 일부 시차에서 유의) ARMA 모형만으로는 완전히 설명되지 않는 패턴 존재 → GARCH류 변동성 모형 결합 필요성 확인
-- 현재는 로그 수익률 자체(단변량)만 사용 — 거시경제 지표, 뉴스 센티먼트 등 외부 변수를 결합한 멀티모달 예측은 후속 과제
-- Chronos는 t5-small 버전 사용 — 더 큰 버전 또는 금융 도메인 fine-tuning 시 성능 변화 확인 필요
+# 주요 수행 내용
+
+- Yahoo Finance 데이터 수집
+- 로그 수익률(Log Return) 생성
+- 정상성 검정(ADF, ACF/PACF)
+- ARIMA 모델 구축 및 최적 차수 선정
+- GARCH 기반 변동성 분석
+- LSTM 시계열 예측 모델 구현
+- PatchTST Transformer 적용
+- Amazon Chronos Foundation Model Zero-shot 예측
+- RMSE, MAE 기반 성능 비교
+
+---
+
+# 결과 요약
+
+| 모델 | 구분 | 특징 | RMSE | MAE |
+| --- | --- | --- | ---: | ---: |
+| **ARIMA(2,0,2)** | 통계 | 잔차 자기상관 거의 없음(Ljung-Box p=0.3218), ARCH 효과 존재 → GARCH 필요성 확인 | - | - |
+| **GARCH(1,1)** | 통계 | α+β=0.997로 높은 변동성 지속성 확인, COVID-19·금리 인상 구간 변동성 포착 | - | - |
+| **LSTM** | Deep Learning | 60일 입력 시퀀스, 2-Layer(64→32) + Dropout | **0.008232** | 0.006283 |
+| **PatchTST** | Transformer | 16일 패치 토큰화, input_size=336 | 0.008565 | 0.006608 |
+| **Chronos** | Foundation Model | amazon/chronos-t5-small, 추가 학습 없는 Zero-shot 예측 | **0.008165** | **0.006220** |
+
+> **Chronos**가 추가 학습 없이도 가장 낮은 MAE를 기록했으며, **LSTM**과 유사한 수준의 예측 성능을 보였습니다. 전통적인 통계 모델은 예측 정확도보다는 데이터의 정상성 및 변동성 특성을 해석하는 데 강점을 확인할 수 있었습니다.
+
+---
+
+# 한계 및 향후 과제
+
+- 잔차에 일부 구조가 남아 있어(Ljung-Box 일부 시차에서 유의), **ARMA 계열 모형만으로는 완전히 설명되지 않는 패턴**이 존재했습니다. 이를 통해 **GARCH와 같은 변동성 모형을 함께 고려할 필요성**을 확인했습니다.
+- 현재는 **로그 수익률만 사용하는 단변량 예측**을 수행했습니다. 향후에는 **거시경제 지표, 금리, 거래량, 뉴스 센티먼트 등 외부 변수를 결합한 멀티모달 예측**을 수행할 계획입니다.
+- Chronos는 **amazon/chronos-t5-small** 모델을 사용했습니다. 향후에는 **더 큰 모델(Chronos Large)** 또는 **금융 도메인 Fine-tuning**을 적용하여 성능 향상을 비교할 예정입니다.
+
+---
+
+# 프로젝트 정보
+
+**개인 프로젝트**
+
+---
+
+# 만든 사람
+
+**박지은**
+
+- GitHub : https://github.com/사용자명
+- Velog : https://velog.io/@사용자명
