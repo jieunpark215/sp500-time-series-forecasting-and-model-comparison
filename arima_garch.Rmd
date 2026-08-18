@@ -1,0 +1,245 @@
+---
+title: "리서치보고서"
+author: "박지은"
+date: "2026-05-10"
+output: html_document
+---
+
+```{r}
+# 필요 패키지 설치 (처음 한 번만)
+# install.packages(c("quantmod", "urca", "FinTS", "forecast", "rugarch", "ggplot2"))
+
+# 라이브러리 로드
+library(quantmod)
+library(urca)
+library(FinTS)
+library(forecast)
+library(ggplot2)
+```
+
+
+```{r}
+# ===== 1. 데이터 수집 =====
+getSymbols("^GSPC", src = "yahoo", from = "2015-01-01", to = "2024-12-31")
+sp500 <- Cl(GSPC)  # 종가만 추출
+```
+
+
+```{r}
+# ===== 2. 로그수익률 변환 =====
+log_ret <- diff(log(sp500))
+log_ret <- na.omit(log_ret)
+```
+
+
+```{r}
+# ===== 3. 기초 시각화 =====
+# 종가 그래프
+par(family = "AppleGothic")
+plot(sp500, main = "S&P500 종가 (2015~2024)", ylab = "종가", col = "#185FA5")
+```
+
+
+```{r}
+# 로그수익률 그래프
+par(family = "AppleGothic")
+plot(log_ret, main = "S&P500 로그수익률", ylab = "로그수익률", col = "#0F6E56")
+```
+
+
+```{r}
+# ===== 4. 기초 통계량 =====
+summary(log_ret)
+cat("표준편차:", sd(log_ret), "\n")
+cat("왜도:", moments::skewness(log_ret), "\n")
+cat("첨도:", moments::kurtosis(log_ret), "\n")
+```
+
+
+```{r}
+# ===== 5. ADF 검정 (정상성) =====
+adf_result <- ur.df(log_ret, type = "none", selectlags = "AIC")
+summary(adf_result)
+```
+
+
+```{r}
+# ===== 6. ACF / PACF =====
+par(mfrow = c(1, 2))
+par(family = "AppleGothic")
+acf(log_ret, main = "ACF - 로그수익률", lag.max = 30)
+pacf(log_ret, main = "PACF - 로그수익률", lag.max = 30)
+par(mfrow = c(1, 1))
+```
+# 2. ARIMA 코드
+```{r}
+# ===== ARIMA 모형 적합 =====
+
+# auto.arima로 최적 차수 자동 선택
+arima_model <- auto.arima(log_ret, 
+                           seasonal = FALSE,
+                           stepwise = FALSE,    # 전체 탐색
+                           approximation = FALSE,
+                           ic = "aic")          # AIC 기준
+
+# 모형 요약
+summary(arima_model)
+```
+
+
+```{r}
+# ===== 잔차 진단 =====
+par(mfrow = c(2, 2))
+par(family = "AppleGothic")
+plot(residuals(arima_model), main = "잔차 시계열")
+acf(residuals(arima_model), main = "잔차 ACF")
+pacf(residuals(arima_model), main = "잔차 PACF")
+qqnorm(residuals(arima_model)); qqline(residuals(arima_model))
+par(mfrow = c(1, 1))
+```
+
+
+```{r}
+# Ljung-Box 검정
+Box.test(residuals(arima_model), lag = 20, type = "Ljung-Box")
+```
+
+
+```{r}
+# ===== 예측 (30일) =====
+arima_forecast <- forecast(arima_model, h = 30)
+par(family = "AppleGothic")
+plot(arima_forecast, 
+     main = "ARIMA 예측 결과 (향후 30일)",
+     ylab = "로그수익률",
+     col = "#185FA5")
+```
+
+
+```{r}
+# ===== 테스트셋 성능 평가 =====
+# train/test 분리 (80:20)
+n <- length(log_ret)
+train <- log_ret[1:round(n * 0.8)]
+test  <- log_ret[(round(n * 0.8) + 1):n]
+
+arima_train <- auto.arima(train, seasonal = FALSE, ic = "aic")
+arima_pred  <- forecast(arima_train, h = length(test))
+
+# RMSE, MAE
+rmse_arima <- sqrt(mean((as.numeric(test) - as.numeric(arima_pred$mean))^2))
+mae_arima  <- mean(abs(as.numeric(test) - as.numeric(arima_pred$mean)))
+
+cat("ARIMA RMSE:", rmse_arima, "\n")
+cat("ARIMA MAE :", mae_arima, "\n")
+```
+# 3. GARCH 적합
+```{r}
+# ===== ARCH 효과 검정 =====
+library(FinTS)
+arch_test <- ArchTest(log_ret, lags = 12)
+print(arch_test)
+# p-value < 0.05 이면 ARCH 효과 존재 → GARCH 적합 정당화
+```
+
+
+```{r}
+# ===== GARCH(1,1) 모형 적합 =====
+library(rugarch)
+
+garch_spec <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(2, 2), include.mean = TRUE),
+  distribution.model = "std"  # 두꺼운 꼬리 → t분포
+)
+
+garch_fit <- ugarchfit(spec = garch_spec, data = log_ret)
+show(garch_fit)
+```
+
+
+```{r}
+# ===== 변동성 시각화 =====
+# 조건부 변동성 추출
+vol <- sigma(garch_fit)
+
+par(family = "AppleGothic")
+plot(vol, type = "l", col = "#993C1D",
+     main = "GARCH(1,1) 조건부 변동성",
+     ylab = "변동성", xlab = "시간")
+```
+
+
+```{r}
+# ===== 변동성 예측 (30일) =====
+garch_forecast <- ugarchforecast(garch_fit, n.ahead = 30)
+par(family = "AppleGothic")
+plot(garch_forecast, which = 3)  # 변동성 예측 그래프
+```
+
+
+```{r}
+# ===== 성능 평가 =====
+# train/test 분리
+n <- length(log_ret)
+train_g <- log_ret[1:round(n * 0.8)]
+test_g  <- log_ret[(round(n * 0.8) + 1):n]
+
+garch_spec2 <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(2, 2), include.mean = TRUE),
+  distribution.model = "std"
+)
+
+garch_fit2   <- ugarchfit(spec = garch_spec2, data = train_g)
+garch_pred   <- ugarchforecast(garch_fit2, n.ahead = length(test_g))
+
+pred_mean <- as.numeric(fitted(garch_pred))
+actual    <- as.numeric(test_g)
+
+rmse_garch <- sqrt(mean((actual - pred_mean)^2))
+mae_garch  <- mean(abs(actual - pred_mean))
+
+cat("GARCH RMSE:", rmse_garch, "\n")
+cat("GARCH MAE :", mae_garch, "\n")
+```
+```{r}
+# ===== GARCH 변동성 시각화 (이벤트 표시) =====
+par(family = "AppleGothic")
+# 조건부 변동성 추출
+vol <- as.numeric(sigma(garch_fit))
+dates <- index(log_ret)
+
+# 데이터프레임으로 변환
+vol_df <- data.frame(date = dates, vol = vol)
+
+# 연율화 변동성 (일별 → 연율화)
+vol_df$vol_annual <- vol_df$vol * sqrt(252) * 100  # % 단위
+
+# 그래프
+plot(vol_df$date, vol_df$vol_annual, type = "l",
+     col = "#993C1D", lwd = 1.2,
+     main = "GARCH(1,1) 조건부 변동성 (연율화)",
+     xlab = "날짜", ylab = "변동성 (%)",
+     ylim = c(0, max(vol_df$vol_annual) * 1.1))
+
+# 주요 이벤트 표시
+abline(v = as.Date("2020-03-01"), col = "#185FA5", lty = 2, lwd = 1.5)
+abline(v = as.Date("2022-01-01"), col = "#534AB7", lty = 2, lwd = 1.5)
+abline(v = as.Date("2018-12-01"), col = "#0F6E56", lty = 2, lwd = 1.5)
+
+# 이벤트 텍스트
+text(as.Date("2020-03-01"), max(vol_df$vol_annual) * 0.95,
+     "COVID-19\n충격", col = "#185FA5", cex = 0.8, pos = 4)
+text(as.Date("2022-01-01"), max(vol_df$vol_annual) * 0.80,
+     "Fed\n금리인상", col = "#534AB7", cex = 0.8, pos = 4)
+text(as.Date("2018-12-01"), max(vol_df$vol_annual) * 0.65,
+     "미중\n무역전쟁", col = "#0F6E56", cex = 0.8, pos = 4)
+
+# 평균 변동성 선
+abline(h = mean(vol_df$vol_annual), col = "gray50", lty = 3)
+text(vol_df$date[50], mean(vol_df$vol_annual),
+     paste0("평균: ", round(mean(vol_df$vol_annual), 1), "%"),
+     col = "gray40", cex = 0.8, pos = 3)
+```
+
